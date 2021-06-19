@@ -5,6 +5,11 @@
   + OpenRC is simpler than systemd: happy middle ground between SysV tradition
     and systemd “modernity.”
   + OpenRC is coming to a container near you!
+  + [[https://mobile.twitter.com/pid_eins/status/1382600667953573889][Give Lennart Poettering a return on his investment... in Bitcoin]]
+    #+begin_quote
+    I am sorry, but I cant stop myself from tweeting this: Gentoo is to
+    distributions what Bitcoin is to money.  --Lennart Poettering, 15 April 2021
+    #+end_quote
 
   What is an “init system?”
 
