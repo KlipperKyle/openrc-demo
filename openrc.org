@@ -1,0 +1,209 @@
+# -*- mode: org; fill-column: 80; -*-
+
+* Why?
+
+  + OpenRC is simpler than systemd: happy middle ground between SysV tradition
+    and systemd “modernity.”
+  + OpenRC is coming to a container near you!
+
+  What is an “init system?”
+
+  1. PID 1: first userspace process
+  2. Service initialization: start them up!
+  3. Service management: what is running?
+  4. Watchdog duty: restart a process
+
+  OpenRC covers jobs 2 and 3.  Jobs 1 and 4 are usually delegated to other
+  tools.
+
+* Playground environment
+
+  + [[https://www.alpinelinux.org/][Alpine Linux]] → Download the virtual image for a virtual machine.
+  + Anything Gentoo-based: Funtoo, Sabayon, MocaccinoOS
+  + Full list: https://distrowatch.com/search.php?defaultinit=OpenRC
+
+* Documentation
+
+  + You need man pages, especially =openrc-run(8)=:
+    + Install within Alpine
+      : apk add man-pages mandoc mandoc-apropos docs
+    + Alpine docs:
+      https://docs.alpinelinux.org/user-handbook/0.1a/Working/openrc.html
+    + Full set: https://www.mankier.com/package/openrc
+    + Gentoo Handbook:
+      https://wiki.gentoo.org/wiki/Handbook:AMD64/Working/Initscripts
+    + Gentoo Wiki: https://wiki.gentoo.org/wiki/OpenRC
+
+* Basics
+
+  + Dirs
+    + =/etc/init.d= → Init scripts
+    + =/etc/conf.d= → Configuration files
+    + =/etc/runlevels= → Named runlevels
+  + =rc-service= → Start/stop/status
+  + =rc-status= → List all services
+  + =rc-update= → Add/remove a service to/from a runlevel
+  + =openrc= → Figure out what needs stopping/starting, and do it!
+    + =openrc foo= → switch to runlevel ‘foo’
+    + Optional =-n= parameter → “do not stop any services”
+
+* Stacked runlevels
+
+  Create a new runlevel and add a service to it:
+
+  #+begin_example
+    mkdir /etc/runlevels/web
+    rc-update -s add default web
+    rc-update add nginx web
+  #+end_example
+
+  Switch to it.
+
+  : openrc web
+
+* Custom service
+
+  =openrc-run= is a wrapper around shell with a bunch of aliases.
+
+  Declarative: =gmnisrv= (C program)
+
+  #+begin_src sh
+    #!/sbin/openrc-run
+    # -*- mode: sh; sh-basic-offset: 8; indent-tabs-mode: t; -*-
+    #
+    # /etc/init.d/gmnisrv
+    #
+
+    command="/usr/local/bin/gmnisrv"
+    description="Gemini server"
+    pidfile="/var/run/gmnisrv.pid"
+    command_background="true"
+    command_args="-C /usr/local/etc/gmnisrv.ini"
+    command_user="gemini:gemini"
+    output_logger="logger"
+    error_logger="logger"
+
+    depend() {
+	    need net
+	    use logger
+    }
+  #+end_src
+
+  Imperative: =pastecat= (Node.JS app)
+
+  #+begin_src sh
+    #!/sbin/openrc-run
+    # /etc/init.d/pastecat
+    # pastecat openrc script
+    #
+    # Helpful info: https://wiki.gentoo.org/wiki/Handbook:AMD64/Working/Initscripts
+
+    description="pastecat"
+
+    depend() {
+	    after networking
+    }
+
+    start() {
+	    ebegin "Starting ${SVCNAME}"
+	    start-stop-daemon --start --exec "${PASTECAT_BIN}" \
+		    --pidfile "${PASTECAT_PIDFILE}" \
+		    --make-pidfile \
+		    --user "${PASTECAT_USER}" \
+		    --background \
+		    --chdir "${PASTECAT_HOME}" \
+		    --stdout "${PASTECAT_LOGDIR}/out" \
+		    --stderr "${PASTECAT_LOGDIR}/err" \
+		    -- ${PASTECAT_OPTS}
+	    eend $?
+    }
+
+    stop() {
+	    ebegin "Stopping ${SVCNAME}"
+	    start-stop-daemon --stop --exec "${PASTECAT_BIN}" \
+		    --pidfile "${PASTECAT_PIDFILE}"
+	    eend $?
+    }
+  #+end_src
+
+  #+begin_src conf
+    # /etc/conf.d/pastecat
+
+    PASTECAT_OPTS="\
+	    -u http://whatever.invalid \
+	    -t 43800h0m0s \
+	    -s 10.00MB \
+	    -M 5.00GB"
+
+    PASTECAT_BIN=/usr/local/bin/pastecat
+    PASTECAT_PIDFILE=/run/pastecat.pid
+    PASTECAT_USER=pastecat
+    PASTECAT_HOME=/var/lib/pastecat
+    PASTECAT_LOGDIR=/var/log/pastecat
+  #+end_src
+
+* Daemon supervision: =supervise-daemon= and =s6=
+
+  + =supervise-daemon= → Very basic process supervision
+  + =s6= → More powerful
+
+  =supervise-daemon= example: see =agetty=.
+
+  Remember: =ln -s agetty agetty.tty12=
+
+  #+begin_src sh
+    #!/sbin/openrc-run
+    # Copyright (c) 2017 The OpenRC Authors.
+    # See the Authors file at the top-level directory of this distribution and
+    # https://github.com/OpenRC/openrc/blob/master/AUTHORS
+    #
+    # This file is part of OpenRC. It is subject to the license terms in
+    # the LICENSE file found in the top-level directory of this
+    # distribution and at https://github.com/OpenRC/openrc/blob/master/LICENSE
+    # This file may not be copied, modified, propagated, or distributed
+    # except according to the terms contained in the LICENSE file.
+
+    description="start agetty on a terminal line"
+    supervisor=supervise-daemon
+    port="${RC_SVCNAME#*.}"
+    respawn_period="${respawn_period:-60}"
+    term_type="${term_type:-linux}"
+    command=/sbin/agetty
+    command_args_foreground="${agetty_options} ${port} ${baud} ${term_type}"
+    pidfile="/run/${RC_SVCNAME}.pid"
+
+    depend() {
+	    after local
+	    keyword -prefix
+    }
+
+    start_pre() {
+	    if [ -z "$port" ]; then
+		    eerror "${RC_SVCNAME} cannot be started directly. You must create"
+		    eerror "symbolic links to it for the ports you want to start"
+		    eerror "agetty on and add those to the appropriate runlevels."
+		    return 1
+	    else
+		    export EINFO_QUIET="${quiet:-yes}"
+	    fi
+    }
+
+    stop_pre()
+    {
+	    export EINFO_QUIET="${quiet:-yes}"
+    }
+  #+end_src
+
+  #+begin_src conf
+    # make agetty quiet
+    #quiet="yes"
+
+    # Set the baud rate of the terminal line
+    #baud=""
+
+    # set the terminal type
+    #term_type="linux"
+
+    # extra options to pass to agetty for this port
+    #agetty_options=""
+  #+end_src

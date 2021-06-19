@@ -1,0 +1,4 @@
+#+title: openrc-demo
+
+This is a simple demo of OpenRC for the Orange County Linux User
+Group, 2021-06-19.

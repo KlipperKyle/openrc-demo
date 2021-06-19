@@ -1,0 +1,56 @@
+# -*- mode: org; fill-column: 80; -*-
+
+* First, setup a PGP key
+
+  A PGP key is required to encrypt =~/.authinfo.gpg=.
+
+* Setup =~/.authinfo.gpg=
+
+  Create an encrypted =~/.authinfo.gpg=.
+
+  : C-x C-f ~/.authinfo.gpg
+  : (Leave buffer empty.)
+  : C-x C-s
+  : (Select your key when prompted.)
+
+  Point Emacs at it.
+
+  : M-x customize-variable <RET> auth-sources
+  : (Ensure ~/.authinfo.gpg is in the list.
+  :  Remove all other items from the list!)
+
+  #+begin_src lisp-interaction
+    auth-sources
+    ("~/.authinfo.gpg")
+  #+end_src
+
+* Remote host
+
+  : C-x C-f /scp:user@remote:/
+
+  Abbreviated:
+
+  : C-x C-f /-:remote:/
+
+  If you are using SSH keys (which you are, right?), then there will be no
+  password prompt.
+
+* Sudo
+
+  : C-x C-f /sudo::/
+
+  Emacs will ask for your sudo password and then ask to save it (encrypted) in
+  =~/.authinfo.gpg=.
+
+* Both
+
+  : C-x C-f /ssh:user@remote|sudo::/
+
+  Translation: SSH in as an unprivileged user and then run sudo to get to root.
+  Ansible users, the analogous term is ‘becoming’.
+
+  You must use =ssh= instead of =scp= because =ssh= is “inline”, meaning other
+  methods can be applied on top of it.
+
+  Emacs will ask for your password and then ask to save it (encrypted) in
+  =~/.authinfo.gpg=.
